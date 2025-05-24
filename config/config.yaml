@@ -1,0 +1,28 @@
+# Source Data
+scrna_source_dir: "/data/benchmarks/andrem/input_rna"
+scatac_source_dir: "/data/benchmarks/andrem/input_scatac"
+
+# Pycistopic
+pycistopic_out_dir: "/data/tmpA/andrem/pycistopic-obj/without-model"
+pycistopic_temp_dir: "/data/tmpA/andrem/pycistopic-obj/temp"
+blacklist: "/data/benchmarks/andrem/pycisTarget/blacklist/hg38-blacklist.v2.bed"
+pycistopic_model_out_dir: "/data/tmpA/andrem/pycistopic-obj/with-model"
+pycistopic_mallet_path: "/home/andrem/GRN-project/resources/Mallet-202108/bin/mallet"
+mallet_temp_dir: "/home/andrem/GRN-project/temp/mallet"
+
+# SCENIC+
+scp_preprocessing_out_dir: "/data/tmpA/andrem/scenicplus/preprocessed-obj"
+scp_scatac_input_dir: "/data/tmpA/andrem/pycistopic-obj/with-model"
+scp_scrna_input_dir: "/data/benchmarks/andrem/input_rna"
+
+#pycistarget
+create_db_script_dir: "/home/andrem/GRN-project/resources/create_cisTarget_databases"
+pycistarget_dir: "/home/andrem/GRN-project/resources/pycisTarget"
+
+#scdart
+scdart_temp_dir: "/data/tmpA/andrem/data-integration/scdart/temp"
+scdart_out_dir: "/data/tmpA/andrem/data-integration/scdart/out"
+chromsizes: "/home/andrem/GRN-project/resources/outs/qc/hg38.chrom_sizes_and_alias.tsv"
+tss: "/home/andrem/GRN-project/resources/outs/qc/tss.bed"
+#dir that contains the dir for scdart
+scdart_dir: "/home/andrem/GRN-project/resources"

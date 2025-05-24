@@ -1,0 +1,36 @@
+configfile: "../config/config.yaml"
+
+# Load shared config variables
+blacklist = config["blacklist"]
+source_rna_dir = config["scrna_source_dir"]
+source_atac_dir = config["scatac_source_dir"]
+pycistopic_out_dir = config["pycistopic_out_dir"]
+pycistopic_model_out_dir = config["pycistopic_model_out_dir"]
+pycistopic_mallet_path = config["pycistopic_mallet_path"]
+pycistopic_temp = config["pycistopic_temp_dir"]
+mallet_temp = config["mallet_temp_dir"]
+
+# SCENIC+
+scp_preprocessing_out_dir = config["scp_preprocessing_out_dir"]
+scp_scATAC_input_dir = config["scp_scatac_input_dir"]
+scp_scRNA_input_dir = config["scp_scrna_input_dir"]
+create_db_script_dir=  config["create_db_script_dir"]
+pycistarget_dir= config["pycistarget_dir"]
+
+# scDART
+scdart_temp_dir = config["scdart_temp_dir"]
+scdart_out_dir = config["scdart_out_dir"]
+
+# Make variables available to included modules
+globals().update({
+    "blacklist": blacklist,
+    "source_rna_dir": source_rna_dir,
+    "source_atac_dir": source_atac_dir,
+    "pycistopic_out_dir": pycistopic_out_dir,
+    "pycistopic_temp": pycistopic_temp
+})
+
+# Include rule definitions
+include: "rules/pycistopic.smk"
+include: "rules/scenicplus.smk"
+include: "rules/data-integration.smk"
