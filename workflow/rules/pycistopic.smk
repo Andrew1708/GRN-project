@@ -11,11 +11,12 @@ rule create_pycistopic_obj:
         blacklist=blacklist,
         out_dir=pycistopic_out_dir,
         project=lambda wildcards: wildcards.sample
+
     conda:
         "../envs/scenicplus.yaml"
     shell:
         """
-        python scripts/pycistopic-obj-creation.py \
+        python scripts/pycistopic_obj_creation.py \
             --temp_dir {params.temp_dir} \
             --out_dir {params.out_dir} \
             --path_to_fragments {input.fragments} \
@@ -43,7 +44,7 @@ rule create_pycistopic_obj_with_model:
 
     shell:
         """
-        python scripts/pycistopic-obj-with-model-creation.py \
+        python scripts/pycistopic_obj_with_model_creation.py \
             --cistopic_path {input.pkl_obj} \
             --temp_dir {params.temp_dir} \
             --out_dir {params.out_dir} \

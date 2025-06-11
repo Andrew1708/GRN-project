@@ -1,3 +1,5 @@
+import argparse
+import pickle
 from pycisTopic.topic_binarization import binarize_topics
 from pycisTopic.utils import region_names_to_coordinates
 import os
@@ -9,8 +11,7 @@ from pycisTopic.diff_features import (
 )
 import numpy as np
 import scanpy as sc
-import argparse
-import pickle
+
 
 cell_type_col_name = "Classified_Celltype"
 malignant_col_name = "Malignant"
@@ -90,7 +91,7 @@ def compute_DAR(cistopic_object, out_dir, temp_dir):
         n_cpu=5,
         split_pattern = '___'
     )
-
+    
     for cell_type in markers_dict:
         region_names_to_coordinates(
             markers_dict[cell_type].index
@@ -119,12 +120,12 @@ def normalize(adata):
     sc.pp.log1p(adata)
     return adata
 
-def select_hvgs(adata, n_top_genes=2000):
+def select_hvgs(adata, n_top_genes=None):
     sc.pp.highly_variable_genes(adata, n_top_genes=n_top_genes)
     adata = adata[:, adata.var.highly_variable].copy()
     return adata
 
-def preprocess(adata, n_top_genes=2000):
+def preprocess(adata, n_top_genes=None):
     adata.raw = adata
     adata = normalize(adata)
     adata = select_hvgs(adata, n_top_genes=n_top_genes)
@@ -179,13 +180,13 @@ def parse_arguments():
 def create_metacell_keys(cistopic_object, adata_rna):
     # Create metacell key from ATAC
     cistopic_object.cell_data[metacell_key] = (
-        cistopic_object.cell_data[cell_type_col_name].astype(str) + "_" +
+        cistopic_object.cell_data[cell_type_col_name].astype(str) + "." +
         cistopic_object.cell_data[malignant_col_name].astype(str)
     )
 
     # Create metacell key from RNA
     adata_rna.obs[metacell_key] = (
-        adata_rna.obs[cell_type_col_name].astype(str) + "_" +
+        adata_rna.obs[cell_type_col_name].astype(str) + "." +
         adata_rna.obs[malignant_col_name].astype(str)
     )
 
@@ -219,12 +220,14 @@ def main():
     compute_DAR(cistopic_object, out_dir, args.temp_dir)
     print("Differential accessibility regions computed.")
 
-
-
     # Preprocess the RNA data
     treat_adata(rna_adata, args.out_dir)
     print("RNA data preprocessing completed.")
 
+    # Save pycistopic obj
+    cistopic_out_dir = os.path.join(out_dir, f"cistopic_object.pkl")
+    with open(cistopic_out_dir, "wb") as f:
+        pickle.dump(cistopic_object, f)
 
 if __name__ == "__main__":
     main()

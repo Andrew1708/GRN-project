@@ -5,9 +5,15 @@ channels:
   - defaults
 dependencies:
   - python=3.11.8
-  - bedtools=2.31.1 
+  - bedtools=2.31.1
+  - scanpy
+  - pandas
+  - numpy
+  - anndata
+  - pyranges
   - pip
-  - git  # optional but useful in dev setups
+  - git  # useful for pip installs from GitHub
   - pip:
-      - git+https://github.com/aertslab/scenicplus
+#      - git+https://github.com/aertslab/scenicplus
+      - /home/andrem/GRN-project/resources/scenicplus
       - flatbuffers==24.3.25

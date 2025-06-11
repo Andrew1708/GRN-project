@@ -1,0 +1,1 @@
+snakemake     --directory workflow     --cores 1     --use-conda     --latency-wait 30     --rerun-triggers input     --dry-run     /data/tmpA/andrem/benchmark/scenicplus/AML{12_DX,12_REL,13_DX,13_REL,14_DX,15_DX,15_REL,15_REM,16_DX,16_REL,16_REM}_MO_metacell_0_benchmark_results.csv

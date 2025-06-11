@@ -1,0 +1,14 @@
+name: celloracle_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - pandas
+  - numpy
+  - matplotlib
+  - seaborn
+  - tqdm
+  - pip
+  - pip:
+      - celloracle

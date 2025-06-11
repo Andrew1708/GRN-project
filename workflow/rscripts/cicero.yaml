@@ -1,0 +1,21 @@
+name: cicero_env
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base=4.4.3
+  - r-devtools
+  - r-remotes
+  - r-biocmanager
+  - r-matrix
+  - libcurl
+  - libxml2
+  - openssl
+  - zlib        # <-- runtime zlib
+  - xz
+  - make
+  - gcc
+  - gxx
+  - r-cairo 
+  - bioconductor-rtracklayer
+  - hdf5

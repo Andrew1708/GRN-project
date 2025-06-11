@@ -2,3 +2,5 @@ resources/
 results/
 temp/
 workflow/.snakemake
+.snakemake/
+workflow/utils/__pycache__

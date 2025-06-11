@@ -1,3 +1,8 @@
+# GLOBAL
+cuda: "0"
+chromsizes: "/home/andrem/GRN-project/resources/outs/qc/hg38.chrom_sizes_and_alias.tsv"
+tss: "/home/andrem/GRN-project/resources/outs/qc/tss.bed"
+
 # Source Data
 scrna_source_dir: "/data/benchmarks/andrem/input_rna"
 scatac_source_dir: "/data/benchmarks/andrem/input_scatac"
@@ -14,6 +19,15 @@ mallet_temp_dir: "/home/andrem/GRN-project/temp/mallet"
 scp_preprocessing_out_dir: "/data/tmpA/andrem/scenicplus/preprocessed-obj"
 scp_scatac_input_dir: "/data/tmpA/andrem/pycistopic-obj/with-model"
 scp_scrna_input_dir: "/data/benchmarks/andrem/input_rna"
+motif_collection: "/home/andrem/GRN-project/resources/pycisTarget/aertslab_motif_colleciton/v10nr_clust_public/snapshots/motifs-v10-nr.hgnc-m0.00001-o0.0.tbl"
+scp_out_dir: "/data/tmpA/andrem/scenicplus/results"
+scp_temp_dir: "/data/tmpA/andrem/scenicplus/temp"
+scp_pipeline_dir: "/home/andrem/GRN-project/resources/scplus_pipeline/Snakemake"
+n_cpu: 16
+
+# CellOracle
+co_preprocessing_out_dir: "/data/tmpA/andrem/celloracle/preprocessed_obj"
+co_out_dir: "/data/tmpA/andrem/celloracle/out"
 
 #pycistarget
 create_db_script_dir: "/home/andrem/GRN-project/resources/create_cisTarget_databases"
@@ -22,7 +36,20 @@ pycistarget_dir: "/home/andrem/GRN-project/resources/pycisTarget"
 #scdart
 scdart_temp_dir: "/data/tmpA/andrem/data-integration/scdart/temp"
 scdart_out_dir: "/data/tmpA/andrem/data-integration/scdart/out"
-chromsizes: "/home/andrem/GRN-project/resources/outs/qc/hg38.chrom_sizes_and_alias.tsv"
-tss: "/home/andrem/GRN-project/resources/outs/qc/tss.bed"
-#dir that contains the dir for scdart
-scdart_dir: "/home/andrem/GRN-project/resources"
+scdart_dir: "/home/andrem/GRN-project/resources" #dir that contains the dir for scdart
+
+#scbridge
+scbridge_temp_dir: "/data/tmpA/andrem/data-integration/scbridge/temp"
+scbridge_out_dir: "/data/tmpA/andrem/data-integration/scbridge/out"
+scbridge_script: "/home/andrem/GRN-project/resources/scBridge/main.py"
+
+#Benchmark
+benchmark_out_dir: "/data/tmpA/andrem/benchmark"
+input_scenicplus: "/data/tmpA/andrem/scenicplus/results"
+tfb_golden: "/data/benchmarks/andrem/data/pAML/benchmarks/tf-binding-test/dbs/tf_bind_db.bed"
+prt_golden: "/data/benchmarks/andrem/data/pAML/benchmarks/tf-actvity/knock_tf_benchmark_data.csv"
+frc_golden: "/data/benchmarks/andrem/data/pAML/benchmarks/tf-actvity/knock_tf_benchmark_data.csv"
+gst_golden: "/data/benchmarks/andrem/data/pAML/benchmarks/gsets/merged_network.csv"
+tfm_golden: "/data/benchmarks/andrem/data/pAML/benchmarks/tfm/filtered_tf_markers.txt"
+celltype_col: "Classified_Celltype"
+
