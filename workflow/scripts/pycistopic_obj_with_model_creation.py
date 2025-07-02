@@ -41,7 +41,7 @@ def parser():
     parser = argparse.ArgumentParser(description="Process directories for barcode and region files.")
     parser.add_argument("--cistopic_path", required=True, help="Path to the cistopic object .pkl file")
     parser.add_argument("--temp_dir", required=True, help="Temporary directory for models")
-    parser.add_argument("--out_dir", required=True, help="Output directory for models")
+    parser.add_argument("--out_file", required=True, help="Output file")
     parser.add_argument("--mallet_path", required=True, help="Path to the Mallet binary")
     return parser.parse_args()
 
@@ -51,17 +51,15 @@ def main():
 
     cistopic_path = args.cistopic_path
     temp = args.temp_dir
-    out_dir = args.out_dir
     mallet_path = args.mallet_path
 
     # (Optional) Create directories if needed
     os.makedirs(temp, exist_ok=True)
-    os.makedirs(out_dir, exist_ok=True)
 
     # Create cistopic object with model
     cistopic_object = create_cistopic_object_with_model(cistopic_path, mallet_path, temp)
     # Save the updated cistopic object
-    out_cistopic_file = os.path.join(out_dir, f"{cistopic_object.project}_model_pycistopic.pkl")
+    out_cistopic_file = args.out_file
     with open(out_cistopic_file, "wb") as f:
         pickle.dump(cistopic_object, f)
 

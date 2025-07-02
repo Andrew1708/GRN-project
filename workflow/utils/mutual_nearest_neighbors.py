@@ -43,7 +43,7 @@ def mutual_nearest_neighbors(rna_embeddings, atac_embeddings, rna_names, atac_na
         - 'Weight': the matching weight between the cells
     """
 
-    n_pcs = min(rna_embeddings.shape[0], rna_embeddings.shape[1])
+    n_pcs = min(rna_embeddings.shape[0], rna_embeddings.shape[1], 50)
     pca = PCA(n_components=n_pcs)
     all_embeddings = np.vstack([rna_embeddings, atac_embeddings])
     pca_result = pca.fit_transform(all_embeddings)

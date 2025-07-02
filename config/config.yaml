@@ -28,6 +28,12 @@ n_cpu: 16
 # CellOracle
 co_preprocessing_out_dir: "/data/tmpA/andrem/celloracle/preprocessed_obj"
 co_out_dir: "/data/tmpA/andrem/celloracle/out"
+cicero_env: "cicero_env"
+
+# Linger
+linger_preprocessing_out_dir: "../data/output/linger/preprocessed_obj"
+linger_out_dir: "../data/output/linger/out"
+linger_data_bulk: "../data/input/linger/data_bulk"
 
 #pycistarget
 create_db_script_dir: "/home/andrem/GRN-project/resources/create_cisTarget_databases"
@@ -42,6 +48,9 @@ scdart_dir: "/home/andrem/GRN-project/resources" #dir that contains the dir for 
 scbridge_temp_dir: "/data/tmpA/andrem/data-integration/scbridge/temp"
 scbridge_out_dir: "/data/tmpA/andrem/data-integration/scbridge/out"
 scbridge_script: "/home/andrem/GRN-project/resources/scBridge/main.py"
+
+#multivi
+multivi_out_dir: "../data/output/data-integration/multivi/out"
 
 #Benchmark
 benchmark_out_dir: "/data/tmpA/andrem/benchmark"

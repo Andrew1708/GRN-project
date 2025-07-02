@@ -41,7 +41,7 @@ def main():
 
     # Load scATAC-seq peak list
     print("Reading peaks file...")
-    peaks = pd.read_csv(args.peaks, index_col=0)
+    peaks = pd.read_csv(args.peaks)
     peaks = peaks.x.values
 
     # Load Cicero coaccessibility scores

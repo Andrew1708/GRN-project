@@ -32,11 +32,10 @@ rule create_pycistopic_obj_with_model:
         pkl_obj= lambda wildcards: f"{pycistopic_out_dir}/{wildcards.sample}_pycistopic_obj.pkl"
 
     output:
-        f"{pycistopic_model_out_dir}/{{sample}}_model_pycistopic.pkl"
+        out_file= f"{pycistopic_model_out_dir}/{{sample}}_model_pycistopic.pkl"
     
     params:
         temp_dir= lambda wildcards: f"{mallet_temp}/{wildcards.sample}_model",
-        out_dir=pycistopic_model_out_dir,
         mallet_path=pycistopic_mallet_path
     
     conda:
@@ -47,6 +46,6 @@ rule create_pycistopic_obj_with_model:
         python scripts/pycistopic_obj_with_model_creation.py \
             --cistopic_path {input.pkl_obj} \
             --temp_dir {params.temp_dir} \
-            --out_dir {params.out_dir} \
+            --out_file {output.out_file} \
             --mallet_path {params.mallet_path} \
         """

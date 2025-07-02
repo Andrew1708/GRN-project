@@ -1,6 +1,7 @@
 name: celloracle_env
 channels:
   - conda-forge
+  - bioconda
   - defaults
 dependencies:
   - python=3.9
@@ -9,6 +10,10 @@ dependencies:
   - matplotlib
   - seaborn
   - tqdm
+  - cython
+  - bedtools
+  - mudata
   - pip
   - pip:
       - celloracle
+      - fa2-modified

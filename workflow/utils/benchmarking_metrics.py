@@ -260,6 +260,10 @@ def tfb_test(
     shared_tfs = set(grn_inferred["TF"]).intersection(set(tf_binding_matrix["TF"]))
     tf_binding_matrix_filtered = tf_binding_matrix[tf_binding_matrix["TF"].isin(shared_tfs)]
 
+    # Step 0.5: Remove rows with missing coordinates
+    grn_inferred = grn_inferred.dropna(subset=["Chromosome", "Start", "End"])
+    tf_binding_matrix = tf_binding_matrix.dropna(subset=["Chromosome", "Start", "End"])
+
     # Step 1: Convert to PyRanges
     grn = pr.PyRanges(grn_inferred[["Chromosome", "Start", "End", "TF"]])
     golden = pr.PyRanges(tf_binding_matrix_filtered[["Chromosome", "Start", "End", "TF"]])
@@ -351,6 +355,7 @@ def tfb_test(
 def tf_activity_benchmark(
     grn: pd.DataFrame,
     golden: pd.DataFrame,
+    score_column: str,
     weight_column: str,
     beta: float = 0.1,
     q_fdr: float = 0.05
@@ -403,7 +408,7 @@ def tf_activity_benchmark(
     # Sort so that the lowest triplet_rank comes first
     grn = grn.copy()
     grn = grn.rename(columns={'TF': 'source', 'Gene': 'target', weight_column: "weight"})
-    grn = grn.sort_values('triplet_rank', ascending=True)
+    grn = grn.sort_values(score_column, ascending=False)
 
     # Drop duplicates, keeping the best (lowest-ranked) edge per source-target pair
     grn = grn.drop_duplicates(subset=['source', 'target'], keep='first')
@@ -553,6 +558,7 @@ def prt_test(
         benchmark_kwargs={
             "grn":grn_inferred,
             "weight_column":weight_column,
+            "score_column": score_column,
             "golden": prt_matrix,
             "beta": beta,
             "q_fdr": q_fdr
@@ -743,6 +749,7 @@ def test_predictability(mdata, train, test, grn, col_source='source', col_target
         y = y[msk]
         X = X[msk, :]
         return X, y
+
     net = grn.iloc[np.argsort(-abs(grn['score'])), :].drop_duplicates([col_source, col_target])
     net = net.groupby(col_target)[col_source].apply(lambda x: list(x) if ntop is None else list(x)[:ntop])
     cor = []
@@ -809,18 +816,31 @@ def omics_benchmark(
         A DataFrame with columns ['name', 'prc', 'rcl', 'f01'], containing the GRN name and its precision, recall,
         and F0.1 score, respectively.
     """
+    # Extract stratification labels
+    celltypes = mdata.obs[celltype_column]
+    
+    # Keep only classes with at least 2 instances
+    valid_classes = celltypes.value_counts()[celltypes.value_counts() >= 2].index
+    mask = celltypes.isin(valid_classes)
+    
+    # Apply mask
+    filtered_obs_names = mdata.obs_names[mask]
+    filtered_celltypes = celltypes[mask]
+
+    # Safe stratified split
     train, test = train_test_split(
-        mdata.obs_names,
+        filtered_obs_names,
         test_size=0.33,
         random_state=42,
-        stratify=mdata.obs[celltype_column]
+        stratify=filtered_celltypes
     )
+
     cor = test_predictability(mdata=mdata, train=train, test=test, grn=grn, mod_source=mod_source, mod_target=mod_target)
     sig_cor = cor[(cor['padj'] < 0.05) & (cor['coef'] > 0.05)]
     n_hits = sig_cor.shape[0]
 
+    universe_size = mdata.mod[mod_target].var_names.size
     if n_hits > 0:
-        universe_size = mdata.mod[mod_target].var_names.size
         rcl = n_hits / universe_size
         prc = n_hits / cor.shape[0]
         f01 = f_beta_score(prc, rcl)
@@ -919,9 +939,9 @@ def get_sig_pws(grn: pd.DataFrame, db: pd.DataFrame, thr_pval: float = 0.01) -> 
     sig_pws = set()
     
     # Preprocess gene sets from db
-    all_genes = set(grn['target'].unique())
+    all_genes = set(grn['target']).union(set(db['target']))
     gene_sets = db.groupby('source')['target'].apply(set)
-    
+
     for tf in grn['source'].unique():
         tf_targets = set(grn.loc[grn['source'] == tf, 'target'])
         if len(tf_targets) == 0:
@@ -931,16 +951,11 @@ def get_sig_pws(grn: pd.DataFrame, db: pd.DataFrame, thr_pval: float = 0.01) -> 
         terms = []
         
         for gene_set_name, gene_set in gene_sets.items():
-            # Build contingency table:
-            #            in gene set     not in gene set
-            # in TF targets     A                  B
-            # not in TF targets C                  D
             A = len(tf_targets & gene_set)
             B = len(tf_targets - gene_set)
             C = len(gene_set - tf_targets)
             D = len(all_genes - (tf_targets | gene_set))
-            
-            # Skip gene sets with no overlap
+
             if A == 0:
                 continue
             
@@ -949,13 +964,11 @@ def get_sig_pws(grn: pd.DataFrame, db: pd.DataFrame, thr_pval: float = 0.01) -> 
             pvals.append(pval)
             terms.append(gene_set_name)
         
-        # Multiple testing correction
         if pvals:
             padj = multipletests(pvals, method='fdr_bh')[1]
             for term, adj_p in zip(terms, padj):
                 if adj_p < thr_pval:
                     sig_pws.add(term)
-    
     return np.array(list(sig_pws))
 
 
@@ -968,13 +981,15 @@ def eval_metrics(y_pred, y):
         rcl = tp / (tp + fn)
         f1 = f_beta_score(prc, rcl)
     else:
-        tp, fp, fn, prc, rcl, f1 = 0., 0., 0.
+        tp, fp, fn, prc, rcl, f1 = 0., 0., 0., 0., 0., 0.
     return tp, fp, fn, prc, rcl, f1
 
 
 def eval_grn(data, grn, db, thr_pval=0.01, thr_prop=0.2):
     hits = data.uns['ulm_hits']
+
     sig_pws = get_sig_pws(grn, db, thr_pval)
+
     tp, fp, fn, prc, rcl, f1 = eval_metrics(y_pred=sig_pws, y=hits)
     return tp, fp, fn, prc, rcl, f1
 
@@ -998,6 +1013,7 @@ def gst_benchmark(
 
     # Infer pathway activities
     if 'ulm_hits' not in rna.uns:
+        print("Running decoupler's ULM to infer pathway activities...")
         dc.mt.ulm(
             data=rna,
             net=ptw,

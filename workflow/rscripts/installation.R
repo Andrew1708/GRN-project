@@ -33,6 +33,7 @@ suppressPackageStartupMessages({
 ##))
 
 # # Install GitHub packages
+# Sys.setenv(GITHUB_PAT = "ADD_YOUR_GITHUB_PAT_HERE") # Set your GitHub PAT here
 #remotes::install_github("bnprks/BPCells/r") #done
 #remotes::install_github("cole-trapnell-lab/monocle3") #done problmes with units and s2
 remotes::install_github("cole-trapnell-lab/cicero-release", ref = "monocle3")

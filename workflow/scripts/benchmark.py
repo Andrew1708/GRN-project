@@ -35,18 +35,25 @@ def modality_names(grn_tool:GRN_TOOLS, cell_type_col, sample):
             return "scRNA_counts", "scATAC_counts", f"scRNA_counts:{cell_type_col}"
         else:
             return "scRNA_counts", "scATAC_counts", "scRNA_counts:Metacell_Key"
+    if grn_tool == "celloracle":
+        if "wihtout_atac" in sample:
+            return "rna", "", f"rna:{cell_type_col}"
+        else:
+            return "rna", "atac", f"rna:{cell_type_col}"
 
 def get_adata(mudata, grn_tool:GRN_TOOLS):
     if grn_tool == "scenicplus":
         return mudata["scRNA_counts"]
+    elif grn_tool == "celloracle":
+        return mudata["rna"]
     else:
         raise ValueError(f"Unsupported GRN inference tool: {grn_tool}")
 
 
 def get_mudata(path:str, grn_tool:GRN_TOOLS):
-    if grn_tool == "scenicplus":
-        scplus_mdata = mu.read_h5mu(path)
-        return scplus_mdata
+    if grn_tool == "scenicplus" or grn_tool == "celloracle":
+        mdata = mu.read_h5mu(path)
+        return mdata
     else:
         raise ValueError(f"Unsupported GRN inference tool: {grn_tool}")
 
@@ -82,9 +89,40 @@ def preprocess_scenicplus(scplus_mdata):
 
     return grn
 
+def preprocess_celloracle(mudata):
+    """
+    Preprocess CellOracle MuData to extract GRN matrix.
+    Assumes the GRN is stored in the 'links' attribute of the MuData object.
+    """
+
+    grn = pd.DataFrame(mudata.uns['celloracle_links'])
+
+    min_logp = grn["-logp"].min()
+    max_logp = grn["-logp"].max()
+
+    grn[SCORE_COL] = (grn["-logp"] - min_logp) / (max_logp - min_logp)
+
+    raw_score = grn["coef_mean"] * grn["-logp"]
+    grn[TF2GENE_W_COL] = np.tanh(3 * raw_score)
+
+    grn["Region"] = grn["chromosome"] + ":" + grn["start"].astype(str) + "-" + grn["end"].astype(str)
+
+    grn = grn.rename(columns={
+    "source": "TF",
+    "target": "Gene",
+    "chromosome": "Chromosome",
+    "start": "Start",
+    "end": "End"
+    })
+
+    return grn
+
 def get_grn_matrix(mudata, grn_tool:GRN_TOOLS):
     if grn_tool == "scenicplus":
         return preprocess_scenicplus(mudata)
+    if grn_tool == "celloracle":
+        return preprocess_celloracle(mudata)
+
 
 def get_benchmark_matrix(tfb_path, prt_path, frc_path, gst_path, tfm_path):
     tfb_matrix = pd.read_csv(tfb_path, sep="\t", header=None)
@@ -127,6 +165,7 @@ if __name__ == "__main__":
 
     mudata = get_mudata(args.grn_path, args.grn_tool)
     grn_inferred = get_grn_matrix(mudata, args.grn_tool)
+    adata = get_adata(mudata, args.grn_tool)
 
     tfb_golden, prt_golden, frc_golden, gst_matrix, tfm_matrix = get_benchmark_matrix(
         args.tfb_golden,
@@ -135,7 +174,51 @@ if __name__ == "__main__":
         args.gst_golden,
         args.tfm_golden
     )
-        # Benchmark OMIC
+
+    # Benchmark TFB
+    tfb_benchmark = tfb_test(
+        grn_inferred=grn_inferred, 
+        tf_binding_matrix=tfb_golden, 
+        score_column=SCORE_COL
+    )
+
+    gst_benchmark = gst_test(
+        grn_inferred=grn_inferred, 
+        ptw=gst_matrix, 
+        rna=adata.copy(),
+        score_column=SCORE_COL,
+        step=0.05
+    )
+    
+    # Benchmark PRT
+    prt_benchmark = prt_test(
+        grn_inferred=grn_inferred, 
+        prt_matrix=prt_golden, 
+        score_column=SCORE_COL,
+        weight_column=TF2GENE_W_COL,
+        step=0.01 
+    )
+
+    # Benchmark FRC
+    frc_benchmark = frc_test(
+        grn_inferred=grn_inferred, 
+        adata=adata.copy(),
+        frc_matrix=frc_golden, 
+        score_column=SCORE_COL,
+        step=0.05
+    )
+
+
+
+    tfm_benchmark = tfm_test(
+        grn_inferred=grn_inferred, 
+        db=tfm_matrix, 
+        adata=adata,
+        score_column=SCORE_COL,
+        step=0.01
+    )
+
+    # Benchmark OMIC
     rna_mod_name, atac_mod_name, celltype_col = modality_names(args.grn_tool, args.celltype_col, args.project_name)
     # Omics TF-Gene´
     omics_tf2g = omic_test(
@@ -150,89 +233,52 @@ if __name__ == "__main__":
         step = 0.3
     )
 
-    # Omics CRE-Gene
-    omics_r2g = omic_test(
-        grn_inferred = grn_inferred,
-        mdata = mudata.copy(),
-        score_column = SCORE_COL,
-        source_column = "Region",
-        target_column = "Gene",
-        mod_source = atac_mod_name,
-        mod_target= rna_mod_name,
-        celltype_column= celltype_col,
-        step = 0.3
-    )
+    if "scenicplus" == args.grn_tool or ("celloracle" == args.grn_tool and "MO" in args.project_name):
+        # Omics CRE-Gene
+        omics_r2g = omic_test(
+            grn_inferred = grn_inferred,
+            mdata = mudata.copy(),
+            score_column = SCORE_COL,
+            source_column = "Region",
+            target_column = "Gene",
+            mod_source = atac_mod_name,
+            mod_target= rna_mod_name,
+            celltype_column= celltype_col,
+            step = 0.3
+        )
 
-    omics_r2tf = omic_test(
-        grn_inferred = grn_inferred,
-        mdata = mudata.copy(),
-        score_column = SCORE_COL,
-        source_column = "Region",
-        target_column = "TF",
-        mod_source = atac_mod_name,
-        mod_target= rna_mod_name,
-        celltype_column= celltype_col,
-        step = 0.3
-    )
-
-    # Benchmark TFB
-    tfb_benchmark = tfb_test(
-        grn_inferred=grn_inferred, 
-        tf_binding_matrix=tfb_golden, 
-        score_column=SCORE_COL
-    )
-    
-    # Benchmark PRT
-    prt_benchmark = prt_test(
-        grn_inferred=grn_inferred, 
-        prt_matrix=prt_golden, 
-        score_column=SCORE_COL,
-        weight_column=TF2GENE_W_COL,
-        step=0.01 
-    )
-
-    # Benchmark FRC
-    adata = get_adata(mudata, args.grn_tool)
-    frc_benchmark = frc_test(
-        grn_inferred=grn_inferred, 
-        adata=adata.copy(),
-        frc_matrix=frc_golden, 
-        score_column=SCORE_COL,
-        step=0.05
-    )
+        omics_r2tf = omic_test(
+            grn_inferred = grn_inferred,
+            mdata = mudata.copy(),
+            score_column = SCORE_COL,
+            source_column = "Region",
+            target_column = "TF",
+            mod_source = atac_mod_name,
+            mod_target= rna_mod_name,
+            celltype_column= celltype_col,
+            step = 0.3
+        )
 
 
-    gst_benchmark = gst_test(
-        grn_inferred=grn_inferred, 
-        ptw=gst_matrix, 
-        rna=adata.copy(),
-        score_column=SCORE_COL,
-        step=0.05
-    )
-
-    tfm_benchmark = tfm_test(
-        grn_inferred=grn_inferred, 
-        db=tfm_matrix, 
-        adata=adata,
-        score_column=SCORE_COL,
-        step=0.01
-    )
 
     # Assume project_name is defined
     project_name = args.project_name if args.project_name else "GRN"
     output_file = os.path.join(args.output_dir, f"{project_name}_benchmark_results.csv")
 
-    # List of benchmark results and their names
-    benchmarks = [
-        ("tfb", tfb_benchmark),
-        ("prt", prt_benchmark),
-        ("frc", frc_benchmark),
-        ("omics_tf2g", omics_tf2g),
-        ("omics_r2g", omics_r2g),
-        ("omics_r2tf", omics_r2tf),
-        ("gst", gst_benchmark),
-        ("tfm", tfm_benchmark)
-    ]
+    benchmarks = []
+
+    # Always available
+    benchmarks.append(("tfb", tfb_benchmark))
+    benchmarks.append(("prt", prt_benchmark))
+    benchmarks.append(("frc", frc_benchmark))
+    benchmarks.append(("omics_tf2g", omics_tf2g))
+    benchmarks.append(("gst", gst_benchmark))
+    benchmarks.append(("tfm", tfm_benchmark))
+
+    # Optional benchmarks
+    if "scenicplus" == args.grn_tool or ("celloracle" == args.grn_tool and "MO" in args.project_name):
+        benchmarks.append(("omics_r2g", omics_r2g))
+        benchmarks.append(("omics_r2tf", omics_r2tf))
 
     # Define the order of columns
     columns = [

@@ -5,9 +5,12 @@ channels:
   - defaults
 dependencies:
   - python=3.10
+  - numpy
+  - cython         # <-- moved from pip to conda
+  - setuptools     # <-- moved from pip to conda
+  - wheel          # <-- moved from pip to conda
   - pip
   - pip:
-      - numpy
       - numba
       - pandas
       - matplotlib
@@ -21,8 +24,5 @@ dependencies:
       - mudata
       - muon
       - typing_extensions
-      - cython
-      - setuptools
-      - wheel
       - celloracle
       - decoupler

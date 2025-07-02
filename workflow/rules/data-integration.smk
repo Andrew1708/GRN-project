@@ -115,6 +115,29 @@ rule run_scbridge:
             --out_dir {params.out_dir} \
         """
 
+rule multivi_integration:
+    input:
+        rna_path= lambda wildcards: f"{config['scrna_source_dir']}/{wildcards.sample}_filtered.h5ad",
+        atac_fragments= lambda wildcards: f"{config['scatac_source_dir']}/{wildcards.sample}_filtered_peak_matrix.mtx",
+        atac_peaks= lambda wildcards: f"{config['scatac_source_dir']}/{wildcards.sample}_peaks.bed",
+        atac_barcodes= lambda wildcards: f"{config['scatac_source_dir']}/{wildcards.sample}_filtered_barcodes.tsv",
+    output:
+        matches= f"{config['multivi_out_dir']}/{{sample}}/matches.csv",
+    params:
+        out_dir= lambda wildcards: f"{config['multivi_out_dir']}/{wildcards.sample}",
+    conda:
+        "../envs/multivi.yaml"
+    shell:
+        """
+        python scripts/multivi_integration.py \
+            --rna_path {input.rna_path} \
+            --atac_fragments {input.atac_fragments} \
+            --atac_peaks {input.atac_peaks} \
+            --atac_barcodes {input.atac_barcodes} \
+            --out_dir {params.out_dir}
+        """
+
+
 
 def get_integration_tool_out_dir(tool):
     if tool == "scdart":

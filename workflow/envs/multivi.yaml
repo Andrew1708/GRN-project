@@ -1,0 +1,13 @@
+name: multivi
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.10
+  - scvi-tools
+  - scanpy
+  - anndata
+  - numpy
+  - pandas
+  - scipy

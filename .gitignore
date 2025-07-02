@@ -4,3 +4,4 @@ temp/
 workflow/.snakemake
 .snakemake/
 workflow/utils/__pycache__
+data/

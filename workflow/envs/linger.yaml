@@ -1,0 +1,16 @@
+name: LINGER
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.10
+  - pandas
+  - scipy
+  - bedtools
+  - r-base
+  - pip
+  - anndata>=0.9.1
+  - mudata>=0.3.0
+  - pip:
+      - LingerGRN==1.105
