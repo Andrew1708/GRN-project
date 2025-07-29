@@ -1,0 +1,20 @@
+name: scconfluence-prep
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.10
+  - scanpy
+  - anndata
+  - pandas
+  - numpy
+  - scipy
+  - scikit-misc  # Required for seurat_v3 flavor
+  - loompy
+  - matplotlib
+  - seaborn
+  - h5py
+  - pip
+  - pip:
+      - mudata

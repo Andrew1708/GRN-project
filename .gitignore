@@ -5,3 +5,5 @@ workflow/.snakemake
 .snakemake/
 workflow/utils/__pycache__
 data/
+workflow/lightning_logs
+*.tmp

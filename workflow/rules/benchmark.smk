@@ -3,10 +3,10 @@ def get_input_dir(grn_tool, sample):
         return f"{config["input_scenicplus"]}/{sample}/scplusmdata.h5mu"
     elif grn_tool == "celloracle":
         return f"{config["co_out_dir"]}/{sample}/mdata.h5mu"
+    elif grn_tool == "linger":
+        return f"{config["linger_out_dir"]}/{sample}/mdata.h5mu"
     else:
         raise ValueError(f"Unknown GRN tool: {grn_tool}. Please specify a valid tool.")
-
-
 
 rule benchmark:
     input:

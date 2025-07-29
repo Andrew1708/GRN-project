@@ -64,8 +64,8 @@ rule create_cistarget_db:
         cbuster_exec = f"{pycistarget_dir}/cbust"
     
     output:
-        ctx_db = protected(f"{scp_preprocessing_out_dir}/{{sample}}/cisTarget_db.regions_vs_motifs.rankings.feather"),
-        dem_db = protected(f"{scp_preprocessing_out_dir}/{{sample}}/cisTarget_db.regions_vs_motifs.scores.feather"),
+        ctx_db = f"{scp_preprocessing_out_dir}/{{sample}}/cisTarget_db.regions_vs_motifs.rankings.feather",
+        dem_db = f"{scp_preprocessing_out_dir}/{{sample}}/cisTarget_db.regions_vs_motifs.scores.feather",
 
     params:
         outdir = lambda wildcards: directory(f"{scp_preprocessing_out_dir}/{wildcards.sample}/cisTarget_db"),
@@ -144,7 +144,7 @@ rule scenicplus:
         cd {params.scp_pipeline_dir}
         snakemake \
         --latency-wait 30 \
-        --cores 8 \
+        --cores {params.n_cpu} \
         --rerun-triggers input \
         --configfile {input.config_file}
         """

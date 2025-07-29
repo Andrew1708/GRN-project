@@ -1,0 +1,19 @@
+name: grn-infer-env
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  - scanpy=1.9.3
+  - anndata=0.8.0
+  - scipy
+  - cudatoolkit=11.8
+  - pytorch=2.0
+  - torchvision
+  - mudata=0.2.3
+  - pip
+  - pip:
+      - scconfluence

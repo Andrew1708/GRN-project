@@ -61,7 +61,16 @@ def main():
 
     # Save embeddings
     embedding_df = pd.DataFrame(match_data['ATAC_embedding'], index=match_data['ATAC'])
-    embedding_df = embedding_df.loc[atac_cistopic.cell_data.index]
+    if args.project_name in atac_cistopic.cell_data.index:
+        embedding_df = embedding_df.loc[atac_cistopic.cell_data.index]
+    # else:
+    #     # Normalize atac index: extract <barcode>-1 from entries like "AAAGGTACAAGGTCGT-1___AML12_DX"
+    #     clean_index = atac_cistopic.cell_data.index.to_series().str.extract(r'^([A-Za-z0-9\-]+-1)')[0]
+    #     atac_cistopic.cell_data.index = clean_index.values
+
+    #     # Now align
+    #     embedding_df = embedding_df.loc[embedding_df.index.intersection(atac_cistopic.cell_data.index)]
+
     atac_cistopic.cell_data['integration_embedding'] = embedding_df.values
 
     # Save old cell type annotation

@@ -159,7 +159,7 @@ def threshold_benchmarking(
     fbeta_scores = []
     thresholds = []
 
-    for threshold in np.arange(step, 1.01, step):
+    for threshold in np.arange(0, 1.01, step):
         print(f"Threshold: {threshold:.2f}")
         filtered_grn = grn[abs(grn[score_column]) >= threshold].copy()
 
@@ -351,7 +351,6 @@ def tfb_test(
 #########################################
 #               TF-ACTIVITY             #
 #########################################
-
 def tf_activity_benchmark(
     grn: pd.DataFrame,
     golden: pd.DataFrame,
@@ -363,70 +362,31 @@ def tf_activity_benchmark(
     """
     Benchmark an inferred GRN using TF perturbation data and decoupler's ULM method.
 
-    This function evaluates whether the inferred regulatory interactions in `grn`
-    are able to recover known transcription factor (TF) perturbation effects from
-    a matrix of gene expression changes following TF perturbation experiments.
-
-    The ULM method (from decoupler-py) is used to score TF activity per experiment.
     A TF perturbation is considered a true positive if:
-      - the perturbed TF is present in the GRN (i.e., used as a source),
+      - the perturbed TF is present in the GRN,
       - the enrichment score from ULM is positive, and
       - the Benjamini-Hochberg corrected FDR is below `q_fdr`.
-
-    Parameters
-    ----------
-    grn : pd.DataFrame
-        Inferred gene regulatory network with at least the following columns:
-        'source' (TF), 'target' (gene), and 'weight' (interaction score).
-    golden : pd.DataFrame
-        TF perturbation matrix. Must include:
-        - 'Dataset ID': experiment identifier,
-        - 'TF_name': name of the perturbed TF,
-        - gene expression logFC values as columns (one per gene).
-    beta : float, optional
-        Beta value used for computing the F-beta score (default is 0.1).
-    q_fdr : float, optional
-        FDR threshold used to call an enrichment as significant (default is 0.1).
 
     Returns
     -------
     tuple
-        A tuple containing:
-        - tp : int
-            Number of true positives (perturbed TFs recovered with positive enrichment and significant FDR).
-        - fp : int
-            Number of false positives (perturbed TFs tested but not meeting TP criteria).
-        - fn : int
-            Number of false negatives (perturbed TFs absent from the GRN).
-        - precision : float
-            Precision of recovered TFs.
-        - recall : float
-            Recall of recovered TFs.
-        - fbeta_score : float
-            F-beta score summarizing precision and recall.
+        (tp, fp, fn, precision, recall, fbeta_score)
     """
-    # Sort so that the lowest triplet_rank comes first
+
+    # --- Prepare GRN ---
     grn = grn.copy()
     grn = grn.rename(columns={'TF': 'source', 'Gene': 'target', weight_column: "weight"})
     grn = grn.sort_values(score_column, ascending=False)
-
-    # Drop duplicates, keeping the best (lowest-ranked) edge per source-target pair
     grn = grn.drop_duplicates(subset=['source', 'target'], keep='first')
-
-    # Prepare infered GRN
     grn['source'] = grn['source'].str.upper()
     grn['target'] = grn['target'].str.upper()
 
-    expr_df = golden.copy()
-    # === Step 1: Prepare expression matrix ===
-    expr_df = expr_df.set_index("Dataset ID")
+    # --- Prepare expression data ---
+    expr_df = golden.copy().set_index("Dataset ID")
     expr_df.columns = expr_df.columns.str.upper()
-
-    # Prepare TF map with uppercase TF names
     expr_tf_map = golden[['Dataset ID', 'TF_name']].copy()
     expr_tf_map.columns = expr_tf_map.columns.str.upper()
 
-    # === Step 2: Filter expression matrix to TFs in GRN ===
     network_tfs = set(grn['source'])
     network_genes = set(grn['target'])
 
@@ -441,25 +401,19 @@ def tf_activity_benchmark(
     expr_matrix = expr_filtered[common_genes]
     expr_tf_map_filtered = expr_tf_map[expr_tf_map['DATASET ID'].isin(expr_matrix.index)].copy()
 
+    # --- Run decoupler ULM ---
     try:
-        estimate, pvals = dc.mt.ulm(
+        estimate, adj_pvals = dc.mt.ulm(
             data=expr_matrix,
             net=grn,
             tmin=0,
             verbose=False
         )
-    except AssertionError as e:
-        print(f"[WARNING] Skipping TF-activity benchmarking for this dataset. Reason: {e}")
+    except Exception as e:
+        print(f"[WARNING] Skipping TF-activity benchmarking. Reason: {e}")
         return (0, 0, 0, 0, 0, 0)
 
-    # === Step 5: BH-correct p-values row-wise ===
-    adj_pvals = pd.DataFrame(index=pvals.index, columns=pvals.columns)
-    for idx in pvals.index:
-        raw_p = pvals.loc[idx].values.astype(float)
-        _, fdr_vals, _, _ = multipletests(raw_p, method='fdr_bh')
-        adj_pvals.loc[idx] = fdr_vals
-
-    # === Step 6: Count true positives (score > 0 and FDR < threshold) ===
+    # --- Count TPs / FPs ---
     tp_results = []
     fp = 0
     for _, row in expr_tf_map_filtered.iterrows():
@@ -469,7 +423,7 @@ def tf_activity_benchmark(
             continue
         score = estimate.loc[exp, tf]
         fdr = adj_pvals.loc[exp, tf]
-        if score < 0 and fdr <= q_fdr:
+        if score < 0 and fdr <= q_fdr: 
             tp_results.append({
                 "experiment_id": exp,
                 "TF": tf,
@@ -480,19 +434,19 @@ def tf_activity_benchmark(
             fp += 1
 
     tp_df = pd.DataFrame(tp_results)
-
-    # === Step 7: Compute precision/recall ===
     tp = len(tp_df)
 
+    # --- Compute FN ---
     perturbed_tfs = set(expr_tf_map['TF_NAME'].str.upper())
-    diff_tf = perturbed_tfs - network_tfs
-    fn = len(diff_tf)
+    fn = len(perturbed_tfs - network_tfs)
 
+    # --- Compute metrics ---
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0
     fbeta_score = (1 + beta**2) * (precision * recall) / (beta**2 * precision + recall) if (precision + recall) > 0 else 0
 
     return tp, fp, fn, precision, recall, fbeta_score
+
 
 
 

@@ -9,6 +9,10 @@ from LingerGRN.pseudo_bulk import pseudo_bulk
 import LingerGRN.LINGER_tr as LINGER_tr
 import LingerGRN.LL_net as LL_net
 
+# Check if outdir has any files (excluding directories)
+def outdir_has_files(outdir):
+    return any(os.path.isfile(os.path.join(outdir, f)) for f in os.listdir(outdir))
+
 def clean_barcode_columns(columns):
     return columns.str.split('___').str[0].str.replace('-1$', '', regex=True)
 
@@ -20,7 +24,6 @@ def parse_args():
     parser.add_argument('--method', type=str, default='LINGER', choices=['LINGER', 'baseline'])
     parser.add_argument('--genome', type=str, default='hg38')
     parser.add_argument('--network', type=str, default='cell population')
-    parser.add_argument('--celltype', type=str, default='all')
     parser.add_argument('--activation', type=str, default='ReLU', choices=['ReLU', 'sigmoid', 'tanh'])
     return parser.parse_args()
 
@@ -44,16 +47,6 @@ def main():
     os.makedirs(data_dir, exist_ok=True)
 
 
-    #TODO meter isto correcto no preparate input => dps de verficar se isto é o correto
-    RNA.columns = clean_barcode_columns(RNA.columns)
-    ATAC.columns = clean_barcode_columns(ATAC.columns)
-    # Clean the "barcode" column and rename it to "barcode_use"
-    label['barcode_use'] = label['barcode'].str.split('___').str[0].str.replace('-1$', '', regex=True)
-    # Drop the original "index" column if it exists
-    label = label.drop(columns=['index'], errors='ignore')
-    # Reorder columns: "label", "barcode_use"
-    label = label[['label', 'barcode_use']]
-
     # Combine and label features
     matrix = csc_matrix(pd.concat([RNA, ATAC], axis=0).values)
     features = pd.DataFrame(RNA.index.tolist() + ATAC.index.tolist(), columns=[1])
@@ -74,48 +67,60 @@ def main():
     adata_RNA = adata_RNA[[b in selected for b in adata_RNA.obs['barcode']]]
     adata_ATAC = adata_ATAC[[b in selected for b in adata_ATAC.obs['barcode']]]
 
-    # Pseudo-bulk
-    samplelist = list(set(adata_ATAC.obs['sample']))
-    singlepseudobulk = adata_RNA.obs['sample'].nunique() ** 2 > 100
-    TG_pseudobulk = pd.DataFrame()
-    RE_pseudobulk = pd.DataFrame()
-
-    for s in samplelist:
-        r_temp = adata_RNA[adata_RNA.obs['sample'] == s]
-        a_temp = adata_ATAC[adata_ATAC.obs['sample'] == s]
-        tg, re = pseudo_bulk(r_temp, a_temp, singlepseudobulk)
-        re[re > 100] = 100
-        TG_pseudobulk = pd.concat([TG_pseudobulk, tg], axis=1)
-        RE_pseudobulk = pd.concat([RE_pseudobulk, re], axis=1)
-
-    TG_pseudobulk = TG_pseudobulk.fillna(0)
-    RE_pseudobulk = RE_pseudobulk.fillna(0)
-
     adata_ATAC.write(os.path.join(data_dir, 'adata_ATAC.h5ad'))
     adata_RNA.write(os.path.join(data_dir, 'adata_RNA.h5ad'))
 
-    # Save LINGER input files into isolated `data/` folder
-    pd.DataFrame(adata_ATAC.var['gene_ids']).to_csv(os.path.join(data_dir, "Peaks.txt"), header=None, index=None)
-    TG_pseudobulk.to_csv(os.path.join(data_dir, "TG_pseudobulk.tsv"), sep='\t')
-    RE_pseudobulk.to_csv(os.path.join(data_dir, "RE_pseudobulk.tsv"), sep='\t')
-    print(f"✅ Pseudo-bulk saved: {data_dir}")
+    # Pseudo-bulk
+    if not outdir_has_files(args.outdir):
+        samplelist = list(set(adata_ATAC.obs['sample']))
+        singlepseudobulk = adata_RNA.obs['sample'].nunique() ** 2 > 100
+        TG_pseudobulk = pd.DataFrame()
+        RE_pseudobulk = pd.DataFrame()
+
+        for s in samplelist:
+            r_temp = adata_RNA[adata_RNA.obs['sample'] == s]
+            a_temp = adata_ATAC[adata_ATAC.obs['sample'] == s]
+            tg, re = pseudo_bulk(r_temp, a_temp, singlepseudobulk)
+            re[re > 100] = 100
+            TG_pseudobulk = pd.concat([TG_pseudobulk, tg], axis=1)
+            RE_pseudobulk = pd.concat([RE_pseudobulk, re], axis=1)
+
+        TG_pseudobulk = TG_pseudobulk.fillna(0)
+        RE_pseudobulk = RE_pseudobulk.fillna(0)
+
+        pd.DataFrame(adata_ATAC.var['gene_ids']).to_csv(os.path.join(data_dir, "Peaks.txt"), header=None, index=None)
+        TG_pseudobulk.to_csv(os.path.join(data_dir, "TG_pseudobulk.tsv"), sep='\t')
+        RE_pseudobulk.to_csv(os.path.join(data_dir, "RE_pseudobulk.tsv"), sep='\t')
+        print(f"✅ Pseudo-bulk saved: {data_dir}")
 
     # Run LINGER inside this directory to isolate all data/ paths
     prev_cwd = os.getcwd()
     os.chdir(run_workdir)
     try:
-        preprocess(TG_pseudobulk, RE_pseudobulk, args.datadir, args.genome, args.method, args.outdir)
-        LINGER_tr.training(args.datadir, args.method, args.outdir, args.activation, "human")
+        print(f"Running LINGER AAAAAAAAA")
+        # 1. Run preprocessing and training only if outdir has no files
+        if not outdir_has_files(args.outdir):
+            print("Preprocessing data and training LINGER...")
+            preprocess(TG_pseudobulk, RE_pseudobulk, args.datadir, args.genome, args.method, args.outdir)
+            LINGER_tr.training(args.datadir, args.method, args.outdir, args.activation, "human")
 
-        # Cell population GRN
-        LL_net.TF_RE_binding(args.datadir, adata_RNA, adata_ATAC, args.genome, args.method, args.outdir)
-        LL_net.cis_reg(args.datadir, adata_RNA, adata_ATAC, args.genome, args.method, args.outdir)
-        LL_net.trans_reg(args.datadir, args.method, args.outdir)
+        # 2. Run TF_RE_binding only if output file doesn't exist
+        tf_re_path = os.path.join(args.outdir, "cell_population_TF_RE_binding.txt")
+        if not os.path.isfile(tf_re_path):
+            print("Running TF–RE binding inference...")
+            LL_net.TF_RE_binding(args.datadir, adata_RNA, adata_ATAC, args.genome, args.method, args.outdir)
 
-        # Cell-type specific GRN
-        LL_net.cell_type_specific_TF_RE_binding(args.datadir, adata_RNA, adata_ATAC, args.genome, args.celltype, args.outdir)
-        LL_net.cell_type_specific_cis_reg(args.datadir, adata_RNA, adata_ATAC, args.genome, args.celltype, args.outdir)
-        LL_net.cell_type_specific_trans_reg(args.datadir, adata_RNA, args.celltype, args.outdir)
+        # 3. Run cis_reg only if output file doesn't exist
+        cis_reg_path = os.path.join(args.outdir, "cell_population_cis_regulatory.txt")
+        if not os.path.isfile(cis_reg_path):
+            print("Running cis-regulatory inference...")
+            LL_net.cis_reg(args.datadir, adata_RNA, adata_ATAC, args.genome, args.method, args.outdir)
+
+        # 4. Run trans_reg only if output file doesn't exist
+        trans_reg_path = os.path.join(args.outdir, "cell_population_trans_regulatory.txt")
+        if not os.path.isfile(trans_reg_path):
+            print("Running trans-regulatory inference...")
+            LL_net.trans_reg(args.datadir, args.method, args.outdir, args.genome)
 
     finally:
         os.chdir(prev_cwd)

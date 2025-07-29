@@ -49,8 +49,9 @@ scbridge_temp_dir: "/data/tmpA/andrem/data-integration/scbridge/temp"
 scbridge_out_dir: "/data/tmpA/andrem/data-integration/scbridge/out"
 scbridge_script: "/home/andrem/GRN-project/resources/scBridge/main.py"
 
-#multivi
-multivi_out_dir: "../data/output/data-integration/multivi/out"
+#scconfluence
+scconfluence_out_dir: "../data/output/data-integration/scconfluence/out"
+scconfluence_temp_dir: "../data/output/data-integration/scconfluence/temp"
 
 #Benchmark
 benchmark_out_dir: "/data/tmpA/andrem/benchmark"

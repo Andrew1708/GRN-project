@@ -91,7 +91,7 @@ rule run_scbridge:
         rna_file = lambda wildcards: f"{config['scbridge_temp_dir']}/{wildcards.sample}/rna_filtered.h5ad",
         gene_act_matrix = lambda wildcards: f"{config['scbridge_temp_dir']}/{wildcards.sample}/gene_act_matrix.h5ad",
     output:
-        matches= f"{config['scbridge_out_dir']}/{{sample}}/matches.csv",
+        matches = f"{config['scbridge_out_dir']}/{{sample}}/matches.csv"
     params:
         main_script = "/home/andrem/GRN-project/resources/scBridge/main.py",
         data_path = lambda wildcards: f"{config['scbridge_temp_dir']}/{wildcards.sample}/",
@@ -115,27 +115,48 @@ rule run_scbridge:
             --out_dir {params.out_dir} \
         """
 
-rule multivi_integration:
+rule scconfluence_preprocessing:
     input:
-        rna_path= lambda wildcards: f"{config['scrna_source_dir']}/{wildcards.sample}_filtered.h5ad",
-        atac_fragments= lambda wildcards: f"{config['scatac_source_dir']}/{wildcards.sample}_filtered_peak_matrix.mtx",
-        atac_peaks= lambda wildcards: f"{config['scatac_source_dir']}/{wildcards.sample}_peaks.bed",
-        atac_barcodes= lambda wildcards: f"{config['scatac_source_dir']}/{wildcards.sample}_filtered_barcodes.tsv",
+        rna = lambda wildcards: f"{config['scrna_source_dir']}/{wildcards.sample}_filtered.h5ad",
+        atac_fragments = lambda wildcards: f"{config['scatac_source_dir']}/{wildcards.sample}_filtered_peak_matrix.mtx",
+        atac_peaks =  lambda wildcards: f"{config['scatac_source_dir']}/{wildcards.sample}_peaks.bed",
+        atac_barcodes = lambda wildcards: f"{config['scatac_source_dir']}/{wildcards.sample}_filtered_barcodes.tsv"
     output:
-        matches= f"{config['multivi_out_dir']}/{{sample}}/matches.csv",
+        h5mu = f"{config['scconfluence_temp_dir']}/{{sample}}/mdata.h5mu"
     params:
-        out_dir= lambda wildcards: f"{config['multivi_out_dir']}/{wildcards.sample}",
+        outdir = lambda wildcards: f"{config['scconfluence_temp_dir']}/{wildcards.sample}",
     conda:
-        "../envs/multivi.yaml"
+        "../envs/scconfluence_pre.yaml",
     shell:
         """
-        python scripts/multivi_integration.py \
-            --rna_path {input.rna_path} \
+        python scripts/scconfluence_preprocessing.py \
+            --rna_path {input.rna} \
             --atac_fragments {input.atac_fragments} \
             --atac_peaks {input.atac_peaks} \
             --atac_barcodes {input.atac_barcodes} \
-            --out_dir {params.out_dir}
+            --project_name {wildcards.sample} \
+            --out_path {output.h5mu}
         """
+
+
+rule run_scconfluence:
+    input:
+        h5mu = lambda wildcards: f"{config['scconfluence_temp_dir']}/{wildcards.sample}/mdata.h5mu",
+    output:
+        matches = f"{config['scconfluence_out_dir']}/{{sample}}/matches.csv",
+    params:
+        outdir = lambda wildcards: f"{config['scconfluence_out_dir']}/{wildcards.sample}",
+        project_name = lambda wildcards: f"{wildcards.sample}_scconfluence",
+    conda:
+        "../envs/scconfluence.yaml",
+    shell:
+        """
+        python scripts/scconfluence_integration.py \
+            --input {input.h5mu} \
+            --output {params.outdir} \
+            --project_name {params.project_name}
+        """
+
 
 
 
@@ -144,6 +165,8 @@ def get_integration_tool_out_dir(tool):
         return config["scdart_out_dir"]
     elif tool == "scbridge":
         return config["scbridge_out_dir"]
+    elif tool == "scconfluence":
+        return config["scconfluence_out_dir"]
     else:
         raise ValueError(f"Unknown integration tool: {tool}")
         return

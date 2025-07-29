@@ -25,7 +25,7 @@ from typing import Literal
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from utils.benchmarking_metrics import *
 
-GRN_TOOLS = Literal["scenicplus", "celloracle"]
+GRN_TOOLS = Literal["scenicplus", "celloracle", "linger"]
 SCORE_COL = "score_rank"
 TF2GENE_W_COL = "TF2Gene_weight"
 
@@ -40,18 +40,20 @@ def modality_names(grn_tool:GRN_TOOLS, cell_type_col, sample):
             return "rna", "", f"rna:{cell_type_col}"
         else:
             return "rna", "atac", f"rna:{cell_type_col}"
+    if grn_tool == "linger":
+        return "rna", "atac", f"rna:{cell_type_col}"
 
 def get_adata(mudata, grn_tool:GRN_TOOLS):
     if grn_tool == "scenicplus":
         return mudata["scRNA_counts"]
-    elif grn_tool == "celloracle":
+    elif grn_tool == "celloracle" or grn_tool == "linger":
         return mudata["rna"]
     else:
         raise ValueError(f"Unsupported GRN inference tool: {grn_tool}")
 
 
 def get_mudata(path:str, grn_tool:GRN_TOOLS):
-    if grn_tool == "scenicplus" or grn_tool == "celloracle":
+    if grn_tool == "scenicplus" or grn_tool == "celloracle" or grn_tool == "linger":
         mdata = mu.read_h5mu(path)
         return mdata
     else:
@@ -97,10 +99,23 @@ def preprocess_celloracle(mudata):
 
     grn = pd.DataFrame(mudata.uns['celloracle_links'])
 
-    min_logp = grn["-logp"].min()
-    max_logp = grn["-logp"].max()
+    # Clean the -logp column
+    grn["-logp"] = grn["-logp"].replace([np.inf, -np.inf], np.nan)
+    grn["-logp"] = grn["-logp"].fillna(0)
 
-    grn[SCORE_COL] = (grn["-logp"] - min_logp) / (max_logp - min_logp)
+    # Optional: coerce -0.0 → 0.0 for cosmetic + numeric sanity
+    grn["-logp"] = grn["-logp"].apply(lambda x: 0.0 if x == 0 else x)
+
+    # Apply ranking
+    ranks = grn["-logp"].rank(method="average")  # you can also try "dense" or "first"
+
+    # Normalize ranks to [0, 1]
+    min_rank, max_rank = ranks.min(), ranks.max()
+    if max_rank > min_rank:
+        grn[SCORE_COL] = (ranks - min_rank) / (max_rank - min_rank)
+    else:
+        grn[SCORE_COL] = 0.0
+
 
     raw_score = grn["coef_mean"] * grn["-logp"]
     grn[TF2GENE_W_COL] = np.tanh(3 * raw_score)
@@ -117,11 +132,69 @@ def preprocess_celloracle(mudata):
 
     return grn
 
+def preprocess_linger(mudata):
+    """
+    Preprocesses a MuData object for Linger-based GRN inference.
+
+    0) Extracts GRN from mudata.uns["grn"]
+    1) Parses 'Region' into 'Chromosome', 'Start', 'End'
+    2) Computes 'triplet_score' = |tf_re_score * tg_re_score| (min-max normalized)
+    3) Computes 'tf2gene_weight' = tanh(3 * tf_tg_score)
+    """
+    
+    # Step 0: Extract the GRN DataFrame
+    grn = mudata.uns["grn"]
+
+    # Step 1: Parse 'Region' into 'Chromosome', 'Start', 'End'
+    region_split = grn["Region"].str.extract(r"^(chr[^\:]+):(\d+)-(\d+)$")
+    grn["Chromosome"] = region_split[0]
+    grn["Start"] = region_split[1].astype(int)
+    grn["End"] = region_split[2].astype(int)
+
+    # Step 2: Compute 'triplet_score' = |tf_re_score * tg_re_score|, normalized
+    if "tf_re_score" not in grn.columns or "tg_re_score" not in grn.columns:
+        raise ValueError("Expected columns 'tf_re_score' and 'tg_re_score' not found in GRN.")
+    
+    # Compute raw score
+    grn["raw_score"] = grn["tf_re_score"] * grn["tg_re_score"] * grn["tf_tg_score"]
+
+    # Use absolute values for ranking (if that’s your criterion)
+    abs_score = grn["raw_score"].abs()
+
+    # Create rank (method="average" handles ties gracefully)
+    ranks = abs_score.rank(method="average")
+
+    # Normalize ranks to [0,1]
+    min_rank, max_rank = ranks.min(), ranks.max()
+    if max_rank > min_rank:
+        grn[SCORE_COL] = (ranks - min_rank) / (max_rank - min_rank)
+    else:
+        grn[SCORE_COL] = 0.0
+
+    # Step 3: Compute 'tf2gene_weight' = tanh(3 * tf_tg_score)
+    if "tf_tg_score" not in grn.columns:
+        raise ValueError("Expected column 'tf_tg_score' not found in GRN.")
+    
+    grn[TF2GENE_W_COL] = np.tanh(3 * grn["tf_tg_score"])
+
+    # fix on mudata
+    adata_rna = mudata.mod["rna"]
+    adata_atac = mudata.mod["atac"]
+
+    adata_rna.obs_names = adata_rna.obs['barcode'].astype(str)
+    adata_atac.obs_names = adata_atac.obs['barcode'].astype(str)
+    adata_atac.var_names = adata_atac.var['gene_ids'].astype(str)
+    
+    return grn
+
+
 def get_grn_matrix(mudata, grn_tool:GRN_TOOLS):
     if grn_tool == "scenicplus":
         return preprocess_scenicplus(mudata)
     if grn_tool == "celloracle":
         return preprocess_celloracle(mudata)
+    if grn_tool == "linger":
+        return preprocess_linger(mudata)
 
 
 def get_benchmark_matrix(tfb_path, prt_path, frc_path, gst_path, tfm_path):
@@ -137,6 +210,23 @@ def get_benchmark_matrix(tfb_path, prt_path, frc_path, gst_path, tfm_path):
     tfm_matrix = df = pd.read_csv(tfm_path, header=None, names=['gene'])
 
     return tfb_matrix, prt_matrix, frc_matrix, gst_matrix, tfm_matrix
+
+
+
+def argparser():
+    parser = argparse.ArgumentParser(description="Benchmark GRN inference tools")
+    parser.add_argument("--grn_path", type=str, required=True, help="Path to the GRN inference results")
+    parser.add_argument("--grn_tool", type=str, required=True, help="GRN inference tool used")
+    parser.add_argument("--tfb_golden", type=str, required=True, help="Path to the golden standard TFB matrix")
+    parser.add_argument("--prt_golden", type=str, required=True, help="Path to the golden standard PRT matrix")
+    parser.add_argument("--frc_golden", type=str, required=True, help="Path to the golden standard FRC matrix")
+    parser.add_argument("--gst_golden", type=str, required=True, help="Path to the golden standard GST matrix")
+    parser.add_argument("--tfm_golden", type=str, required=True, help="Path to the golden standard TFM matrix")
+    parser.add_argument("--project_name", type=str, help="Name of the project for saving results")
+    parser.add_argument("--celltype_col", type=str, default="Classified_Celltype", help="Column name for cell types in the metadata")
+    parser.add_argument("--output_dir", type=str, default=".", help="Directory to save the benchmark results")
+    return parser.parse_args()
+
 
 
 
@@ -175,21 +265,6 @@ if __name__ == "__main__":
         args.tfm_golden
     )
 
-    # Benchmark TFB
-    tfb_benchmark = tfb_test(
-        grn_inferred=grn_inferred, 
-        tf_binding_matrix=tfb_golden, 
-        score_column=SCORE_COL
-    )
-
-    gst_benchmark = gst_test(
-        grn_inferred=grn_inferred, 
-        ptw=gst_matrix, 
-        rna=adata.copy(),
-        score_column=SCORE_COL,
-        step=0.05
-    )
-    
     # Benchmark PRT
     prt_benchmark = prt_test(
         grn_inferred=grn_inferred, 
@@ -207,6 +282,22 @@ if __name__ == "__main__":
         score_column=SCORE_COL,
         step=0.05
     )
+
+    # Benchmark TFB
+    tfb_benchmark = tfb_test(
+        grn_inferred=grn_inferred, 
+        tf_binding_matrix=tfb_golden, 
+        score_column=SCORE_COL
+    )
+
+    gst_benchmark = gst_test(
+        grn_inferred=grn_inferred, 
+        ptw=gst_matrix, 
+        rna=adata.copy(),
+        score_column=SCORE_COL,
+        step=0.05
+    )
+   
 
 
 
@@ -233,7 +324,7 @@ if __name__ == "__main__":
         step = 0.3
     )
 
-    if "scenicplus" == args.grn_tool or ("celloracle" == args.grn_tool and "MO" in args.project_name):
+    if "scenicplus" == args.grn_tool or ("celloracle" == args.grn_tool and "with_atac" in args.project_name) or args.grn_tool == "linger":
         # Omics CRE-Gene
         omics_r2g = omic_test(
             grn_inferred = grn_inferred,
@@ -276,7 +367,7 @@ if __name__ == "__main__":
     benchmarks.append(("tfm", tfm_benchmark))
 
     # Optional benchmarks
-    if "scenicplus" == args.grn_tool or ("celloracle" == args.grn_tool and "MO" in args.project_name):
+    if "scenicplus" == args.grn_tool or ("celloracle" == args.grn_tool and "with_atac" in args.project_name) or args.grn_tool == "linger":
         benchmarks.append(("omics_r2g", omics_r2g))
         benchmarks.append(("omics_r2tf", omics_r2tf))
 
