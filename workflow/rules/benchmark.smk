@@ -20,6 +20,7 @@ rule benchmark:
         frc_golden= config["frc_golden"],
         gst_golden= config["gst_golden"],
         tfm_golden= config["tfm_golden"],
+        c2g_golden = config["c2g_golden"],
         celltype_col = config.get("celltype_col", "Classified_Celltype"),
         output_dir= lambda wildcards: f"{config['benchmark_out_dir']}/{wildcards.grn_tool}",
 
@@ -38,6 +39,7 @@ rule benchmark:
             --frc_golden {params.frc_golden} \
             --gst_golden {params.gst_golden} \
             --tfm_golden {params.tfm_golden} \
+            --c2g_golden {params.c2g_golden} \
             --project_name {wildcards.sample} \
             --celltype_col {params.celltype_col} \
             --output_dir {params.output_dir}
@@ -56,6 +58,7 @@ rule fix_benchmark:
         frc_golden = config["frc_golden"],
         gst_golden = config["gst_golden"],
         tfm_golden = config["tfm_golden"],
+        c2g_golden = config["c2g_golden"],
         celltype_col = config.get("celltype_col", "Classified_Celltype"),
         test_list = ["gst"],
     conda:
@@ -73,6 +76,7 @@ rule fix_benchmark:
             --frc_golden {params.frc_golden} \
             --gst_golden {params.gst_golden} \
             --tfm_golden {params.tfm_golden} \
+            --c2g_golden {params.c2g_golden} \
             --project_name {wildcards.sample} \
             --celltype_col {params.celltype_col} \
             --out_file {output.corrected_table}

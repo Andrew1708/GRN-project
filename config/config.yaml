@@ -61,5 +61,6 @@ prt_golden: "/data/benchmarks/andrem/data/pAML/benchmarks/tf-actvity/knock_tf_be
 frc_golden: "/data/benchmarks/andrem/data/pAML/benchmarks/tf-actvity/knock_tf_benchmark_data.csv"
 gst_golden: "/data/benchmarks/andrem/data/pAML/benchmarks/gsets/merged_network.csv"
 tfm_golden: "/data/benchmarks/andrem/data/pAML/benchmarks/tfm/filtered_tf_markers.txt"
+c2g_golden: "/home/andrem/GRN-project/data/input/data/pAML/benchmarks/cre2gene/eqtlcatalogue.bed"
 celltype_col: "Classified_Celltype"
 

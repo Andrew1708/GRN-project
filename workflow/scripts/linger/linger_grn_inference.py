@@ -19,7 +19,7 @@ def clean_barcode_columns(columns):
 def parse_args():
     parser = argparse.ArgumentParser(description="Run LINGER pipeline and save results in MuData")
     parser.add_argument('--data_dir', type=str, required=True, help='Directory with RNA.txt, ATAC.txt, label.txt')
-    parser.add_argument('--datadir', type=str, required=True, help='Directory with bulk GRN data (not used by LINGER)')
+    parser.add_argument('--datadir', type=str, required=True, help='Directory with bulk GRN data')
     parser.add_argument('--outdir', type=str, required=True, help='Unique output directory for this run')
     parser.add_argument('--method', type=str, default='LINGER', choices=['LINGER', 'baseline'])
     parser.add_argument('--genome', type=str, default='hg38')
@@ -97,7 +97,7 @@ def main():
     prev_cwd = os.getcwd()
     os.chdir(run_workdir)
     try:
-        print(f"Running LINGER AAAAAAAAA")
+        print(f"Running LINGER")
         # 1. Run preprocessing and training only if outdir has no files
         if not outdir_has_files(args.outdir):
             print("Preprocessing data and training LINGER...")

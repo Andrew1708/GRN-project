@@ -197,7 +197,7 @@ def get_grn_matrix(mudata, grn_tool:GRN_TOOLS):
         return preprocess_linger(mudata)
 
 
-def get_benchmark_matrix(tfb_path, prt_path, frc_path, gst_path, tfm_path):
+def get_benchmark_matrix(tfb_path, prt_path, frc_path, gst_path, tfm_path, c2g_path):
     tfb_matrix = pd.read_csv(tfb_path, sep="\t", header=None)
     tfb_matrix.columns = ["Chromosome", "Start", "End", "TF"]
 
@@ -209,7 +209,9 @@ def get_benchmark_matrix(tfb_path, prt_path, frc_path, gst_path, tfm_path):
 
     tfm_matrix = df = pd.read_csv(tfm_path, header=None, names=['gene'])
 
-    return tfb_matrix, prt_matrix, frc_matrix, gst_matrix, tfm_matrix
+    c2g_matrix = pd.read_csv(c2g_path, sep="\t", header=None, names=["Chromosome", "Start", "End", "Gene", "Sample"], engine="python")
+
+    return tfb_matrix, prt_matrix, frc_matrix, gst_matrix, tfm_matrix, c2g_matrix
 
 
 
@@ -222,28 +224,11 @@ def argparser():
     parser.add_argument("--frc_golden", type=str, required=True, help="Path to the golden standard FRC matrix")
     parser.add_argument("--gst_golden", type=str, required=True, help="Path to the golden standard GST matrix")
     parser.add_argument("--tfm_golden", type=str, required=True, help="Path to the golden standard TFM matrix")
+    parser.add_argument("--c2g_golden", type=str, required=True, help="Path to the golden standard C2G matrix")
     parser.add_argument("--project_name", type=str, help="Name of the project for saving results")
     parser.add_argument("--celltype_col", type=str, default="Classified_Celltype", help="Column name for cell types in the metadata")
     parser.add_argument("--output_dir", type=str, default=".", help="Directory to save the benchmark results")
     return parser.parse_args()
-
-
-
-
-def argparser():
-    parser = argparse.ArgumentParser(description="Benchmark GRN inference tools")
-    parser.add_argument("--grn_path", type=str, required=True, help="Path to the GRN inference results")
-    parser.add_argument("--grn_tool", type=str, required=True, help="GRN inference tool used")
-    parser.add_argument("--tfb_golden", type=str, required=True, help="Path to the golden standard TFB matrix")
-    parser.add_argument("--prt_golden", type=str, required=True, help="Path to the golden standard PRT matrix")
-    parser.add_argument("--frc_golden", type=str, required=True, help="Path to the golden standard FRC matrix")
-    parser.add_argument("--gst_golden", type=str, required=True, help="Path to the golden standard GST matrix")
-    parser.add_argument("--tfm_golden", type=str, required=True, help="Path to the golden standard TFM matrix")
-    parser.add_argument("--project_name", type=str, help="Name of the project for saving results")
-    parser.add_argument("--celltype_col", type=str, default="Classified_Celltype", help="Column name for cell types in the metadata")
-    parser.add_argument("--output_dir", type=str, default=".", help="Directory to save the benchmark results")
-    return parser.parse_args()
-
 
 if __name__ == "__main__":
     start_time = time.time()
@@ -257,12 +242,13 @@ if __name__ == "__main__":
     grn_inferred = get_grn_matrix(mudata, args.grn_tool)
     adata = get_adata(mudata, args.grn_tool)
 
-    tfb_golden, prt_golden, frc_golden, gst_matrix, tfm_matrix = get_benchmark_matrix(
+    tfb_golden, prt_golden, frc_golden, gst_matrix, tfm_matrix, c2g_matrix = get_benchmark_matrix(
         args.tfb_golden,
         args.prt_golden,
         args.frc_golden,
         args.gst_golden,
-        args.tfm_golden
+        args.tfm_golden,
+        args.c2g_golden
     )
 
     # Benchmark PRT
@@ -308,6 +294,13 @@ if __name__ == "__main__":
         score_column=SCORE_COL,
         step=0.01
     )
+    
+    # Benchmark C2G
+    c2g_benchmark = cre_gene_test(
+        grn_inferred=grn_inferred,
+        cre_gene_catalogue=c2g_matrix,
+        score_column=SCORE_COL,
+    )
 
     # Benchmark OMIC
     rna_mod_name, atac_mod_name, celltype_col = modality_names(args.grn_tool, args.celltype_col, args.project_name)
@@ -324,7 +317,7 @@ if __name__ == "__main__":
         step = 0.3
     )
 
-    if "scenicplus" == args.grn_tool or ("celloracle" == args.grn_tool and "with_atac" in args.project_name) or args.grn_tool == "linger":
+    if "scenicplus" == args.grn_tool or ("celloracle" == args.grn_tool and "with_atac" in args.project_name and "MO" in args.project_name) or args.grn_tool == "linger":
         # Omics CRE-Gene
         omics_r2g = omic_test(
             grn_inferred = grn_inferred,
@@ -365,9 +358,10 @@ if __name__ == "__main__":
     benchmarks.append(("omics_tf2g", omics_tf2g))
     benchmarks.append(("gst", gst_benchmark))
     benchmarks.append(("tfm", tfm_benchmark))
+    benchmarks.append(("c2g", c2g_benchmark))
 
     # Optional benchmarks
-    if "scenicplus" == args.grn_tool or ("celloracle" == args.grn_tool and "with_atac" in args.project_name) or args.grn_tool == "linger":
+    if "scenicplus" == args.grn_tool or ("celloracle" == args.grn_tool and "with_atac" in args.project_name and "MO" in args.project_name) or args.grn_tool == "linger":
         benchmarks.append(("omics_r2g", omics_r2g))
         benchmarks.append(("omics_r2tf", omics_r2tf))
 

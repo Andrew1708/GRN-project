@@ -1112,3 +1112,129 @@ def tfm_test(
         score_column=score_column,
         step=step
     )
+
+
+###########################################
+#              CRE-GENE                   #
+########################################### 
+import pyranges as pr
+import pandas as pd
+from sklearn.metrics import roc_auc_score, average_precision_score, precision_recall_curve
+
+def cre_gene_test(
+    grn_inferred: pd.DataFrame,
+    cre_gene_catalogue: pd.DataFrame,
+    score_column: str,
+    beta: float = 0.1,
+    slack: int = 100
+) -> dict:
+    """
+    Evaluate an inferred CRE–Gene regulatory network against a gold-standard
+    CRE–Gene catalogue (eQTL Catalogue).
+
+    Parameters
+    ----------
+    grn_inferred : pd.DataFrame
+        DataFrame with inferred CRE–Gene interactions.
+        Must contain: 'Chromosome', 'Start', 'End', 'Gene', and a score column.
+    cre_gene_catalogue : pd.DataFrame
+        Gold-standard CRE–Gene annotation from eQTL Catalogue.
+        Must contain: 'Chromosome', 'Start', 'End', 'Gene'.
+    score_column : str
+        Name of the column in `grn_inferred` to use as prediction score.
+    beta : float, optional
+        Beta parameter for F-beta score (default=0.1).
+    slack : int, optional
+        Allowed slack (bp) for overlap between predicted and true CREs.
+
+    Returns
+    -------
+    dict
+        Dictionary with precision, recall, F-beta, AUROC, AUPRC,
+        and best threshold/metrics from PR curve.
+    """
+
+    # Filter to shared genes
+    shared_genes = set(grn_inferred["Gene"]).intersection(set(cre_gene_catalogue["Gene"]))
+    grn_inferred = grn_inferred[grn_inferred["Gene"].isin(shared_genes)]
+    cre_gene_catalogue = cre_gene_catalogue[cre_gene_catalogue["Gene"].isin(shared_genes)]
+
+    # Remove missing coords
+    grn_inferred = grn_inferred.dropna(subset=["Chromosome", "Start", "End"])
+    cre_gene_catalogue = cre_gene_catalogue.dropna(subset=["Chromosome", "Start", "End"])
+
+    # Convert to PyRanges
+    grn = pr.PyRanges(grn_inferred[["Chromosome", "Start", "End", "Gene"]])
+    golden = pr.PyRanges(cre_gene_catalogue[["Chromosome", "Start", "End", "Gene"]])
+
+    # Overlap predicted and gold-standard regions with slack
+    overlap = grn.join(golden, strandedness=False, slack=slack, suffix="_golden")
+
+    # True Positives = matching gene
+    overlap_df = overlap.df
+    tp_df = overlap_df[overlap_df["Gene"] == overlap_df["Gene_golden"]]
+    tp_df = tp_df[["Chromosome", "Start", "End", "Gene"]].drop_duplicates()
+
+    # Count TP, FP, FN
+    grn_df = grn.df.drop_duplicates(subset=["Chromosome", "Start", "End", "Gene"])
+    golden_df = golden.df.drop_duplicates(subset=["Chromosome", "Start", "End", "Gene"])
+
+    tp = len(tp_df)
+    fp = len(grn_df) - tp
+    fn = len(golden_df) - tp
+
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    fbeta_score = (1 + beta**2) * (precision * recall) / (beta**2 * precision + recall + 1e-10)
+
+    # Label inferred CRE–Gene links
+    df = grn_inferred[["Chromosome", "Start", "End", "Gene", score_column]].copy()
+    df["_merge"] = df.merge(
+        tp_df,
+        on=["Chromosome", "Start", "End", "Gene"],
+        how="left",
+        indicator=True
+    )["_merge"]
+    df["label"] = (df["_merge"] == "both").astype(int)
+
+    y_true = df["label"]
+    y_score = df[score_column]
+    valid = y_score.notna()
+    y_true, y_score = y_true[valid], y_score[valid]
+
+    if y_true.nunique() < 2:
+        auroc, auprc = float("nan"), float("nan")
+    else:
+        auroc = roc_auc_score(y_true, y_score)
+        auprc = average_precision_score(y_true, y_score)
+
+    # Precision–recall curve and optimal F-beta
+    precision_curve, recall_curve, thresholds = precision_recall_curve(y_true, y_score)
+    precision_curve = precision_curve[1:]
+    recall_curve = recall_curve[1:]
+    thresholds = thresholds[:len(precision_curve)]
+
+    f_beta = (1 + beta**2) * (precision_curve * recall_curve) / (
+        beta**2 * precision_curve + recall_curve + 1e-10
+    )
+
+    best_idx = f_beta.argmax() if len(f_beta) > 0 else None
+    best_thresh = thresholds[best_idx] if best_idx is not None and len(thresholds) > 0 else None
+    best_fbeta = f_beta[best_idx] if best_idx is not None else 0.0
+    best_precision = precision_curve[best_idx] if best_idx is not None else 0.0
+    best_recall = recall_curve[best_idx] if best_idx is not None else 0.0
+
+    return format_benchmarking_metrics(
+        tp=tp,
+        fp=fp,
+        fn=fn,
+        precision=precision,
+        recall=recall,
+        fbeta=fbeta_score,
+        auroc=auroc,
+        auprc=auprc,
+        best_threshold=best_thresh,
+        best_fbeta=best_fbeta,
+        best_precision=best_precision,
+        best_recall=best_recall
+    )
